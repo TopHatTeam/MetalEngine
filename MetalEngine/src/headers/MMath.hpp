@@ -81,8 +81,16 @@ FVector MulVector(FVector* a, FVector* b);
 */
 FVector DivVector(FVector* a, FVector* b);
 
-namespace engine
+namespace engine::types
 {
+	template<typename T> struct vec2
+	{
+		T x;
+		T y;
+		vec2<T>() : x{}, y{} {}
+		vec2<T>(T x, T y) : x{ X }, y { Y } {}
+	};
+
 	template<typename T> struct vec3
 	{
 		T x;
@@ -90,6 +98,16 @@ namespace engine
 		T z;
 		vec3<T>() : x{}, y{}, z{} {}
 		vec3<T>(T X, T Y, T Z) : x{ X }, y{ Y }, z{ Z } {}
+	};
+
+	template<typename T> struct vec4
+	{
+		T x;
+		T y;
+		T z;
+		T w;
+		vec4<T>() : x{}, y{}, z{}, w{} {}
+		vec4<T>(T X, T Y, T Z, T W) : x{ X }, y{ Y }, z{ Z }, w{ W } {}
 	};
 
 	template<typename T> struct rot3

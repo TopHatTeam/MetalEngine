@@ -28,14 +28,14 @@ static bool vulkan::IsExtensionAvailable(const vector<VkExtensionProperties>& pr
 
 static bool vulkan::IsDeviceSuitable(VkPhysicalDevice device)
 {
-	MetalQueueFamilyIndices indices = FindQueueFamiles(device);
+	MetalVulkanQueueFamilyIndices indices = FindQueueFamiles(device);
 
 	bool extensions_supported = CheckDeviceExtensionsSupport(device);
 
 	bool swapchain_adequate = false;
 	if (extensions_supported)
 	{
-		MetalSwapChainSupportDetails swapchain_support = QuerySwapChainSupport(device);
+		MetalVulkanSwapChainSupportDetails swapchain_support = QuerySwapChainSupport(device);
 		swapchain_adequate = !swapchain_support.formats.empty() && !swapchain_support.present_modes.empty();
 	}
 
@@ -45,9 +45,9 @@ static bool vulkan::IsDeviceSuitable(VkPhysicalDevice device)
 	return indices.IsComplete() && extensions_supported && swapchain_adequate && features.samplerAnisotropy;
 }
 
-MetalQueueFamilyIndices vulkan::FindQueueFamiles(VkPhysicalDevice device)
+MetalVulkanQueueFamilyIndices vulkan::FindQueueFamiles(VkPhysicalDevice device)
 {
-	MetalQueueFamilyIndices indices;
+	MetalVulkanQueueFamilyIndices indices;
 
 	VkUint32 queuefamilycount = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(device, &queuefamilycount, nullptr);
@@ -83,9 +83,9 @@ MetalQueueFamilyIndices vulkan::FindQueueFamiles(VkPhysicalDevice device)
 	return indices;
 }
 
-MetalSwapChainSupportDetails vulkan::QuerySwapChainSupport(VkPhysicalDevice device)
+MetalVulkanSwapChainSupportDetails vulkan::QuerySwapChainSupport(VkPhysicalDevice device)
 {
-	MetalSwapChainSupportDetails details;
+	MetalVulkanSwapChainSupportDetails details;
 
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_surface, &details.capabilities);
 
@@ -237,7 +237,7 @@ static int vulkan::VulkanSetupRenderer(vector<const char*> instance_extension)
 	fmt::print("Physical Device: {}\n", m_properties.deviceName);
 
 	/* Creating logical device*/
-	MetalQueueFamilyIndices indices = FindQueueFamiles(m_physicaldevice);
+	MetalVulkanQueueFamilyIndices indices = FindQueueFamiles(m_physicaldevice);
 	vector<VkDeviceQueueCreateInfo> queue_create_information;
 	set<VkUint32> unique_queue_families = { indices.graphics_family, indices.present_family };
 
@@ -269,8 +269,56 @@ static int vulkan::VulkanSetupRenderer(vector<const char*> instance_extension)
 	vkGetDeviceQueue(m_device, indices.present_family, 0, &m_presentqueue);
 
 	/* Creating command pool*/
-	MetalQueueFamilyIndices queue_family_indices = FindPhysicalQueueFamilies();
+	MetalVulkanQueueFamilyIndices queue_family_indices = FindPhysicalQueueFamilies();
 
+	VkCommandPoolCreateInfo poolinfo = {};
+	poolinfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	poolinfo.queueFamilyIndex = queue_family_indices.graphics_family;
+	poolinfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+	VK_CHECK(vkCreateCommandPool(m_device, &poolinfo, nullptr, &m_commandpool));
+}
+
+void vulkan::VulkanCreateSwapchain()
+{
+
+}
+
+void vulkan::VulkanCreateImageViews()
+{
+
+}
+
+void vulkan::VulkanCreateDepthResources()
+{
+
+}
+
+void vulkan::VulkanCreateRenderPass()
+{
+
+}
+
+void vulkan::VulkanCreateFramebuffers()
+{
+
+}
+
+void vulkan::VulkanCreateSyncObjects()
+{
+
+}
+
+MetalVulkanPipeline::MetalVulkanPipeline(const string& vertexfilepath, const string& fragmentfilepath)
+{
+
+}
+
+MetalVulkanPipeline::~MetalVulkanPipeline()
+{
+	vkDestroyShaderModule(m_device, VertexShaderModule, nullptr);
+	vkDestroyShaderModule(m_device, FragmentShaderModule, nullptr);
+	vkDestroyPipeline(m_device, m_graphicspipeline, nullptr);
 }
 
 vector<char> MetalVulkanPipeline::ReadShaderFile(const string& filepath)
@@ -297,6 +345,159 @@ void MetalVulkanPipeline::CreateGraphicsPipeline(const string& vertexfilepath, c
 {
 	auto VertexCode		= ReadShaderFile(vertexfilepath);
 	auto FragmentCode	= ReadShaderFile(fragmentfilepath);
+
+	CreateShaderModule(VertexCode, &VertexShaderModule);
+	CreateShaderModule(FragmentCode, &FragmentShaderModule);
+
+	VkPipelineShaderStageCreateInfo shader_stages[2];
+
+	shader_stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shader_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+	shader_stages[0].module = VertexShaderModule;
+	shader_stages[0].pName = "main";
+	shader_stages[0].flags = 0;
+	shader_stages[0].pNext = nullptr;
+	shader_stages[0].pSpecializationInfo = nullptr;
+
+	shader_stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shader_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	shader_stages[1].module = FragmentShaderModule;
+	shader_stages[1].pName = "main";
+	shader_stages[1].flags = 0;
+	shader_stages[1].pNext = nullptr;
+	shader_stages[1].pSpecializationInfo = nullptr;
+
+	VkPipelineVertexInputStateCreateInfo VertexInputInfo{};
+	VertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	VertexInputInfo.vertexAttributeDescriptionCount = 0;
+	VertexInputInfo.vertexBindingDescriptionCount = 0;
+	VertexInputInfo.pVertexAttributeDescriptions = nullptr;
+	VertexInputInfo.pVertexBindingDescriptions = nullptr;
+
+	VkGraphicsPipelineCreateInfo PipelineInfo{};
+	PipelineInfo.sType					= VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	PipelineInfo.stageCount				= 2;
+	PipelineInfo.pStages				= shader_stages;
+	PipelineInfo.pVertexInputState		= &VertexInputInfo;
+	PipelineInfo.pInputAssemblyState	= &MetalPipelineInfo.inputassemblyinfo;
+	PipelineInfo.pViewportState			= &MetalPipelineInfo.viewportinfo;
+	PipelineInfo.pRasterizationState	= &MetalPipelineInfo.rasterizationinfo;
+	PipelineInfo.pMultisampleState		= &MetalPipelineInfo.multisampleinfo;
+	PipelineInfo.pColorBlendState		= &MetalPipelineInfo.colorblendinfo;
+	PipelineInfo.pDepthStencilState		= &MetalPipelineInfo.depth_stencil_info;
+	PipelineInfo.pDynamicState			= nullptr;
+	PipelineInfo.layout					= MetalPipelineInfo.pipeline_layout;
+	PipelineInfo.renderPass				= MetalPipelineInfo.renderpass;
+	PipelineInfo.subpass				= MetalPipelineInfo.subpass;
+	PipelineInfo.basePipelineIndex = -1;
+	PipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+
+	VK_CHECK(vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &PipelineInfo, nullptr, &m_graphicspipeline));
+}
+
+MetalVulkanPipelineConfigInfo MetalVulkanPipeline::DefaultPipelineConfigInfo(VkUint32 width, VkUint32 height)
+{
+	MetalVulkanPipelineConfigInfo config_info = {};
+
+	/*
+		These lines of code are to configure the input assembly stage of the Vulkan Graphics Pipeline.
+		The stage will tell Vulkan how to interpret and assemble the vertex data—that is provided by vertex buffers (and optionally an index buffer)
+		into geometric primitives.
+
+		A deeper explain in this case:
+		- sType -> tells Vulkan to define this as an input assembly state structure
+		- topology -> 'VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST' this tells Vulkan every 3 vertices to form a independent triangle
+		- primitiveRestartEnable -> Disables primitive restart (only useful for stripping topologies)
+	*/
+	config_info.inputassemblyinfo.sType						= VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	config_info.inputassemblyinfo.topology					= VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	config_info.inputassemblyinfo.primitiveRestartEnable	= VK_FALSE;
+
+
+	/*
+		
+		An explanation of these lines:
+		- x -> Tells Vulkan to start drawing at the top of the screen
+		- y -> Tells Vulkan to start drawing at the left of the screen
+		- width -> width of the rendering area (casting a unsigned 32-bit integer to a float) 
+ 		- height -> height of the rendering area (casting a unsigned 32-bit integer to a float)
+		- minDepth -> this defines the minimum Z depth value (a.k.a closest distance to a plane Vulkan is allowed to render)
+		- maxDepth -> this defines the maximum Z depth value (a.k.a farthest distance to a plane Vulkan is allowed to render)
+	*/
+	config_info.viewport.x			= 0.0f;
+	config_info.viewport.y			= 0.0f;
+	config_info.viewport.width		= static_cast<float>(width);
+	config_info.viewport.height		= static_cast<float>(height);
+	config_info.viewport.minDepth	= 0.0f;
+	config_info.viewport.maxDepth	= 1.0f;
+
+	config_info.scissor.offset = { 0, 0 };
+	config_info.scissor.extent = { width, height };
+
+	config_info.viewportinfo.sType			= VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	config_info.viewportinfo.viewportCount	= 1;
+	config_info.viewportinfo.pViewports		= &config_info.viewport;
+	config_info.viewportinfo.scissorCount	= 1;
+	config_info.viewportinfo.pScissors		= &config_info.scissor;
+
+	config_info.rasterizationinfo.sType						= VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	config_info.rasterizationinfo.depthClampEnable			= VK_FALSE;
+	config_info.rasterizationinfo.rasterizerDiscardEnable	= VK_FALSE;
+	config_info.rasterizationinfo.polygonMode				= VK_POLYGON_MODE_FILL;
+	config_info.rasterizationinfo.lineWidth					= 1.0f;
+	config_info.rasterizationinfo.cullMode					= VK_CULL_MODE_NONE;
+	config_info.rasterizationinfo.frontFace					= VK_FRONT_FACE_CLOCKWISE;
+	config_info.rasterizationinfo.depthBiasEnable			= VK_FALSE;
+	config_info.rasterizationinfo.depthBiasConstantFactor	= 0.0f;
+	config_info.rasterizationinfo.depthBiasClamp			= 0.0f;
+	config_info.rasterizationinfo.depthBiasSlopeFactor		= 0.0f;
+
+	config_info.multisampleinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	config_info.multisampleinfo.sampleShadingEnable = VK_FALSE;
+	config_info.multisampleinfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	config_info.multisampleinfo.minSampleShading = 1.0f;
+	config_info.multisampleinfo.pSampleMask = nullptr;
+	config_info.multisampleinfo.alphaToCoverageEnable = VK_FALSE;
+	config_info.multisampleinfo.alphaToOneEnable = VK_FALSE;
+
+	config_info.colorblend_attachment.colorWriteMask =
+		VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	config_info.colorblend_attachment.blendEnable = VK_FALSE;
+	config_info.colorblend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+	config_info.colorblend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+	config_info.colorblend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+	config_info.colorblend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	config_info.colorblend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	config_info.colorblend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+	
+	config_info.colorblendinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	config_info.colorblendinfo.logicOpEnable = VK_FALSE;
+	config_info.colorblendinfo.logicOp = VK_LOGIC_OP_COPY;
+	config_info.colorblendinfo.attachmentCount = 1;
+	config_info.colorblendinfo.pAttachments = &config_info.colorblend_attachment;
+	config_info.colorblendinfo.blendConstants[0] = 0.0f;
+	config_info.colorblendinfo.blendConstants[1] = 0.0f;
+	config_info.colorblendinfo.blendConstants[2] = 0.0f;
+	config_info.colorblendinfo.blendConstants[3] = 0.0f;
+
+	return config_info;
+}
+
+void MetalVulkanPipeline::CreateShaderModule(const vector<char>& code, VkShaderModule* shadermodule)
+{
+	VkShaderModuleCreateInfo shader_creation_info = {};
+	shader_creation_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	shader_creation_info.codeSize = code.size();
+
+	/* We're converting one pointer type to another without changing the numerical value of the pointer in question
+		We don't want any bit-shuffling, no runtime conversion! We want the pointer bytes unchanged
+		SPIR-V expects pCode to be a sequence of constant 32-bit words
+	*/
+	shader_creation_info.pCode = reinterpret_cast<const VkUint32*>(code.data()); 
+
+	VK_CHECK(vkCreateShaderModule(m_device, &shader_creation_info, nullptr, shadermodule));
+
+
 }
 
 MetalVulkanWindow::~MetalVulkanWindow()

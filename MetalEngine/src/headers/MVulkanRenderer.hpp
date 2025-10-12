@@ -147,7 +147,7 @@ namespace engine::vulkan
 		}
 	};
 
-	struct MetalQueueFamilyIndices
+	struct MetalVulkanQueueFamilyIndices
 	{
 		VkUint32 graphics_family;
 		VkUint32 present_family;
@@ -156,11 +156,27 @@ namespace engine::vulkan
 		bool IsComplete() { return does_graphics_has_value && does_present_family_has_value; }
 	};
 
-	struct MetalSwapChainSupportDetails
+	struct MetalVulkanSwapChainSupportDetails
 	{
 		VkSurfaceCapabilitiesKHR capabilities;
 		vector<VkSurfaceFormatKHR> formats;
 		vector<VkPresentModeKHR> present_modes;
+	};
+
+	struct MetalVulkanPipelineConfigInfo
+	{
+		VkViewport viewport;
+		VkRect2D scissor;
+		VkPipelineViewportStateCreateInfo viewportinfo;
+		VkPipelineInputAssemblyStateCreateInfo inputassemblyinfo;
+		VkPipelineRasterizationStateCreateInfo rasterizationinfo;
+		VkPipelineMultisampleStateCreateInfo multisampleinfo;
+		VkPipelineColorBlendAttachmentState colorblend_attachment;
+		VkPipelineColorBlendStateCreateInfo colorblendinfo;
+		VkPipelineDepthStencilStateCreateInfo depth_stencil_info;
+		VkPipelineLayout pipeline_layout = nullptr;
+		VkRenderPass renderpass = nullptr;
+		VkUint32 subpass = 0;
 	};
 	
 	class MetalVulkanBlock;
@@ -168,10 +184,79 @@ namespace engine::vulkan
 	class MetalVulkanPipeline
 	{
 	public:
+
+		/**
+		* @brief Constructor of the Vulkan pipeline of the Metal Engine
+		* @param vertexfilepath Path to the compilied Vulkan vertex shader
+		* @param fragmentfilepath Path to the compilied Vulkan fragment shader
+		*/
 		MetalVulkanPipeline(const string& vertexfilepath, const string& fragmentfilepath);
+
+
 		~MetalVulkanPipeline();
+
+		MetalVulkanPipeline(const MetalVulkanPipeline&) = delete;
+		void operator=(const MetalVulkanPipeline*)		= delete;
+
+
 		static vector<char> ReadShaderFile(const string& filepath);
+
+		static MetalVulkanPipelineConfigInfo DefaultPipelineConfigInfo(VkUint32 width, VkUint32 height);
+
+
 		void CreateGraphicsPipeline(const string& vertexfilepath, const string& fragmentfilepath);
+
+
+		void CreateShaderModule(const vector<char>& code, VkShaderModule* shadermodule);
+
+		VkShaderModule GetVertexShaderModule() const { return VertexShaderModule; }
+		VkShaderModule GetFragmentShaderModule() const { return FragmentShaderModule; }
+		MetalVulkanPipelineConfigInfo GetPipelineInfo() const { return MetalPipelineInfo; }
+
+		void SetVertexShaderModule(VkShaderModule input) { VertexShaderModule = input; }
+		void SetFragmentModule(VkShaderModule input) { FragmentShaderModule = input; }
+		void SetPipelineInfo(MetalVulkanPipelineConfigInfo input) { MetalPipelineInfo = input; }
+
+	protected:
+		MetalVulkanPipelineConfigInfo MetalPipelineInfo;
+		VkShaderModule VertexShaderModule;
+		VkShaderModule FragmentShaderModule;
+	};
+
+	class MetalVulkanSwapchain
+	{
+	public:
+		static constexpr int MAXIMUM_FRAMES_IN_FLIGHTS = 2;
+
+		MetalVulkanSwapchain(VkDevice device, VkExtent2D winextent);
+
+		~MetalVulkanSwapchain();
+
+		MetalVulkanSwapchain(const MetalVulkanSwapchain&) = delete;
+		void operator=(const MetalVulkanSwapchain&) = delete;
+
+		VkFramebuffer GetFrameBuffer(int index) const { return SwapchainFramebuffers[index]; }
+		VkRenderPass GetRenderPass() const { return renderpass; }
+		VkImageView GetImageView(int index) const { return SwapchainImageViews[index]; }
+		usize ImageCount() const { return SwapchainImages.size(); }
+		VkFormat GetSwapchainImageFormat() const { return swapchain_image_format; }
+		VkExtent2D GetSwapchainExtent() const { return SwapchainExtent; }
+		VkUint32 GetWidth() const { return SwapchainExtent.width; }
+		VkUint32 GetHeight() const { return SwapchainExtent.height; }
+	protected:
+		VkRenderPass renderpass;
+		VkFormat swapchain_image_format;
+		VkExtent2D SwapchainExtent;
+		vector<VkFramebuffer> SwapchainFramebuffers;
+		vector<VkImage> DepthImages;
+		vector<VkDeviceMemory> DepthImagesMemories;
+		vector<VkImage> SwapchainImages;
+		vector<VkImageView> SwapchainImageViews;
+		vector<VkSemaphore> ImageAvilableSemaphores;
+		vector<VkSemaphore> RenderFinishedSemaphores;
+		vector<VkFence> InFlightFences;
+		vector<VkFence> ImagesInFlight;
+		VkExtent2D WindowExtent;
 	};
 
 	class MetalVulkanWindow
@@ -220,7 +305,6 @@ namespace engine::vulkan
 		float main_scale;
 	};
 
-
 	inline VkAllocationCallbacks*		m_allocator			= nullptr;
 	inline VkInstance					m_instance			= VK_NULL_HANDLE;
 	inline VkPhysicalDevice				m_physicaldevice	= VK_NULL_HANDLE;
@@ -236,6 +320,7 @@ namespace engine::vulkan
 	inline VkQueue						m_queue				= VK_NULL_HANDLE;
 	inline VkPipelineCache				m_pipelinecache		= VK_NULL_HANDLE;
 	inline VkDescriptorPool				m_descriptorpool	= VK_NULL_HANDLE;
+	inline VkCommandPool				m_commandpool		= VK_NULL_HANDLE;
 	inline VkPhysicalDeviceProperties	m_properties;	
 	const inline vector<const char*>	m_deviceextension	= {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 	inline VkUint32						m_minimagecount		= 2;
@@ -245,16 +330,18 @@ namespace engine::vulkan
 	inline vector<const char*>			m_instance_extensions;
 	inline VkQueue						m_graphicsqueue		= VK_NULL_HANDLE;
 	inline VkQueue						m_presentqueue		= VK_NULL_HANDLE;
+	inline VkPipeline					m_graphicspipeline	= VK_NULL_HANDLE;
+	inline VkSwapchainKHR				m_swapchain			= VK_NULL_HANDLE;
 
 	static bool IsExtensionAvailable(const vector<VkExtensionProperties>& properties, const char* extension);
 
 	static bool IsDeviceSuitable(VkPhysicalDevice device);
 
-	MetalQueueFamilyIndices FindQueueFamiles(VkPhysicalDevice device);
+	MetalVulkanQueueFamilyIndices FindQueueFamiles(VkPhysicalDevice device);
 
-	MetalSwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
+	MetalVulkanSwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
 
-	MetalQueueFamilyIndices FindPhysicalQueueFamilies() { return FindQueueFamiles(m_physicaldevice); }
+	MetalVulkanQueueFamilyIndices FindPhysicalQueueFamilies() { return FindQueueFamiles(m_physicaldevice); }
 
 	static bool CheckDeviceExtensionsSupport(VkPhysicalDevice device);
 
@@ -275,6 +362,13 @@ namespace engine::vulkan
 	* @returns void
 	*/
 	static bool VulkanInitRenderer();
+
+	void VulkanCreateSwapchain();
+	void VulkanCreateImageViews();
+	void VulkanCreateDepthResources();
+	void VulkanCreateRenderPass();
+	void VulkanCreateFramebuffers();
+	void VulkanCreateSyncObjects();
 
 	static bool IsHostVisible() { return m_usage != VMU_GPU_ONLY; }
 
