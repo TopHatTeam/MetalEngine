@@ -11,8 +11,13 @@
 #pragma once
 
 #include <cmath>
-//#define pi 3.14159265358979323846	/*Useful for 3D projection*/
-constexpr double pi = 3.14159265358979323846;
+
+/*Mathematical constant PI */
+#define PI 3.14159265358979323846;
+
+/*Mathematical constant E*/
+#define E 2.718281828459045
+
 
 /*
 	Yeah, yeah I know you don't have to do 'typedef' for C++ but I'm a C person okay

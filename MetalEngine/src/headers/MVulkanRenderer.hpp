@@ -20,6 +20,8 @@
 #include <vector>
 #include <fstream>
 #include <set>
+#include <array>
+#include <limits>
 
 #include "MTypes.hpp"
 
@@ -29,6 +31,7 @@ typedef unsigned char		VkUint8;		/* 8-bit unsigned integer specifically for Vulk
 typedef unsigned short      VkUint16;		/* 16-bit unsigned integer specifically for Vulkan*/
 typedef unsigned int		VkUint32;		/* 32-bit unsigned integer specifically for Vulkan*/
 typedef unsigned long long	VkUint64;		/* 64-bit unsigned integer specifically for Vulkan*/
+typedef unsigned long long	VkUsize;
 
 #define VK_ERROR_STRING(x) case static_cast<int>(x): return #x
 
@@ -86,7 +89,7 @@ constexpr inline const char* VK_ErrorToString(VkResult result)
 	}											\
 }
 
-using std::string, std::vector, std::ifstream, std::ios, std::set;
+using std::string, std::vector, std::ifstream, std::ios, std::set, std::numeric_limits, std::max, std::min, std::array;
 
 namespace engine::vulkan
 {
@@ -228,35 +231,13 @@ namespace engine::vulkan
 	public:
 		static constexpr int MAXIMUM_FRAMES_IN_FLIGHTS = 2;
 
-		MetalVulkanSwapchain(VkDevice device, VkExtent2D winextent);
+		MetalVulkanSwapchain();
 
 		~MetalVulkanSwapchain();
 
 		MetalVulkanSwapchain(const MetalVulkanSwapchain&) = delete;
 		void operator=(const MetalVulkanSwapchain&) = delete;
 
-		VkFramebuffer GetFrameBuffer(int index) const { return SwapchainFramebuffers[index]; }
-		VkRenderPass GetRenderPass() const { return renderpass; }
-		VkImageView GetImageView(int index) const { return SwapchainImageViews[index]; }
-		usize ImageCount() const { return SwapchainImages.size(); }
-		VkFormat GetSwapchainImageFormat() const { return swapchain_image_format; }
-		VkExtent2D GetSwapchainExtent() const { return SwapchainExtent; }
-		VkUint32 GetWidth() const { return SwapchainExtent.width; }
-		VkUint32 GetHeight() const { return SwapchainExtent.height; }
-	protected:
-		VkRenderPass renderpass;
-		VkFormat swapchain_image_format;
-		VkExtent2D SwapchainExtent;
-		vector<VkFramebuffer> SwapchainFramebuffers;
-		vector<VkImage> DepthImages;
-		vector<VkDeviceMemory> DepthImagesMemories;
-		vector<VkImage> SwapchainImages;
-		vector<VkImageView> SwapchainImageViews;
-		vector<VkSemaphore> ImageAvilableSemaphores;
-		vector<VkSemaphore> RenderFinishedSemaphores;
-		vector<VkFence> InFlightFences;
-		vector<VkFence> ImagesInFlight;
-		VkExtent2D WindowExtent;
 	};
 
 	class MetalVulkanWindow
@@ -331,7 +312,32 @@ namespace engine::vulkan
 	inline VkQueue						m_graphicsqueue		= VK_NULL_HANDLE;
 	inline VkQueue						m_presentqueue		= VK_NULL_HANDLE;
 	inline VkPipeline					m_graphicspipeline	= VK_NULL_HANDLE;
+	inline MetalVulkanSwapchain			m_swapchainclass;
 	inline VkSwapchainKHR				m_swapchain			= VK_NULL_HANDLE;
+	inline VkRenderPass					m_renderpass;
+	inline VkFormat						m_swapchain_image_format;
+	inline VkExtent2D					m_swapchain_extent;
+	inline vector<VkFramebuffer>		m_swapchain_framebuffers;
+	inline vector<VkImage>				m_depthimages;
+	inline vector<VkDeviceMemory>		m_depthimages_memories;
+	inline vector<VkImageView>			m_depthimage_views;
+	inline vector<VkImage>				m_swapchain_images;
+	inline vector<VkImageView>			m_swapchain_image_views;
+	inline vector<VkSemaphore>			m_image_available_semaphores;
+	inline vector<VkSemaphore>			m_render_finished_semaphores;
+	inline vector<VkFence>				m_in_flight_fences;
+	inline vector<VkFence>				m_images_in_flight;
+	inline VkExtent2D					m_window_extent;
+	inline VkUsize CurrentFrame = 0;
+	inline constexpr int MAXIMUM_FRAMES_IN_FLIGHTS = 2;
+
+	float ExtentAspectRatio()
+	{
+		/* For C developers I'll translate this code into a more understandable C way
+		* return (float)(SwapchainExtent.width) / (float)(SwapchainExtent.height)
+		*/
+		return static_cast<float>(m_swapchain_extent.width) / static_cast<float>(m_swapchain_extent.height);
+	}
 
 	static bool IsExtensionAvailable(const vector<VkExtensionProperties>& properties, const char* extension);
 
@@ -339,9 +345,38 @@ namespace engine::vulkan
 
 	MetalVulkanQueueFamilyIndices FindQueueFamiles(VkPhysicalDevice device);
 
+	MetalVulkanSwapChainSupportDetails GetSwapchainSupport() { return QuerySwapChainSupport(m_physicaldevice); }
+
 	MetalVulkanSwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device);
 
 	MetalVulkanQueueFamilyIndices FindPhysicalQueueFamilies() { return FindQueueFamiles(m_physicaldevice); }
+
+	/**
+	* @brief This function is used for aquiring a swapchain image to render the next frame
+	* @param imageindex -> the Vulkan image index
+	* @note This function is waiting for the GPU to finish render the previous image;
+	*/
+	VkResult AcquireNextImage(VkUint32* imageindex);
+
+	VkFormat FindSupportedFormat(const vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+
+	VkFormat FindDepthFormat() 
+	{ 
+		return FindSupportedFormat({ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+			VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+	}
+
+	VkResult SubmitCommandBuffers(const VkCommandBuffer* buffers, VkUint32* imageindex);
+
+	VkUint32 FindMemoryType(VkUint32 typefilter, VkMemoryPropertyFlags properties);
+
+	VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const vector<VkSurfaceFormatKHR>& usableformats);
+
+	VkPresentModeKHR ChooseSwapPresentMode(const vector<VkPresentModeKHR>& usable_present_modes);
+
+	VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
+
+	void CreateImageWithInfo(const VkImageCreateInfo& imageinfo, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imagememory);
 
 	static bool CheckDeviceExtensionsSupport(VkPhysicalDevice device);
 
